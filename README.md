@@ -48,3 +48,44 @@ npm run build
 - Lucide React (icons)
 - Axios (HTTP client)
 - Recharts (charts)
+
+## Memory Optimization
+
+This application implements several memory optimization strategies for high-frequency data processing:
+
+### Key Optimizations
+
+1. **Circular Buffer** (`src/utils/memoryPool.js`)
+   - O(1) insertion time for token history
+   - Pre-allocated memory prevents dynamic allocation overhead
+   - Automatic size limiting prevents memory leaks
+
+2. **Efficient Stats Calculation**
+   - Single-pass iteration instead of multiple `filter()` operations
+   - No intermediate array creation during calculations
+
+3. **React Component Memoization**
+   - `React.memo` for TokenItem and RiskIcon components
+   - `useCallback` for event handlers to prevent unnecessary re-renders
+   - `useRef` for persistent data without triggering re-renders
+
+4. **Request Cancellation**
+   - Axios CancelToken prevents memory leaks from abandoned requests
+   - Clean async handling for high-frequency API calls
+
+5. **Consolidated State Management**
+   - Single state object for Web3 provider
+   - Atomic state updates reduce re-render frequency
+
+### Performance Monitoring
+
+Use the performance monitoring hooks in `src/utils/usePerformanceMonitor.js`:
+
+```javascript
+import { usePerformanceMonitor } from './utils/usePerformanceMonitor';
+
+// In your component
+const { renderCount, getMemoryUsage } = usePerformanceMonitor('ComponentName', data);
+```
+
+See `src/utils/MEMORY_OPTIMIZATION.md` for detailed documentation.

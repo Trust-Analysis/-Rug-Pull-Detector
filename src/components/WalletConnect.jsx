@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useWeb3 } from '../context/Web3Provider';
 import { Wallet, LogOut, Loader2 } from 'lucide-react';
+
+// Memoized address formatter to avoid string operations on every render
+const formatAddress = (addr) => {
+  if (!addr) return '';
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+};
 
 const WalletConnect = () => {
   const { account, isConnected, connectWallet, disconnectWallet } = useWeb3();
   const [isConnecting, setIsConnecting] = useState(false);
 
-  const formatAddress = (addr) => {
-    if (!addr) return '';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  const handleConnect = async () => {
+  // Memoized connect handler
+  const handleConnect = useCallback(async () => {
     setIsConnecting(true);
     await connectWallet();
     setIsConnecting(false);
-  };
+  }, [connectWallet]);
 
   if (isConnecting) {
     return (

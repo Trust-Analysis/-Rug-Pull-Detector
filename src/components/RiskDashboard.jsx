@@ -1,49 +1,77 @@
-import React from 'react';
+import React, { useMemo, memo } from 'react';
 import { Shield, AlertTriangle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { getRiskLevelColor, getScoreColor, calculateStats } from '../utils/memoryPool';
+
+// Memoized icon component to prevent unnecessary re-renders
+const RiskIcon = memo(({ level }) => {
+  switch (level) {
+    case 'Low':
+      return <CheckCircle className="w-5 h-5" />;
+    case 'Medium':
+      return <AlertTriangle className="w-5 h-5" />;
+    case 'High':
+      return <AlertTriangle className="w-5 h-5" />;
+    case 'Critical':
+      return <XCircle className="w-5 h-5" />;
+    default:
+      return <Shield className="w-5 h-5" />;
+  }
+});
+
+// Memoized token item component
+const TokenItem = memo(({ token }) => (
+  <div className="bg-white/5 rounded-lg p-4 border border-white/10 hover:border-white/20 transition-colors">
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex-1">
+        <div className="font-mono text-sm text-primary-400 mb-1">
+          {token.tokenAddress}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Clock className="w-3 h-3" />
+          {new Date(token.timestamp).toLocaleTimeString()}
+        </div>
+      </div>
+      <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getRiskLevelColor(token.riskLevel)} flex items-center gap-1`}>
+        <RiskIcon level={token.riskLevel} />
+        {token.riskLevel}
+      </div>
+    </div>
+
+    {/* Risk Score Bar */}
+    <div className="mb-3">
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-gray-400">Risk Score</span>
+        <span className="text-white font-medium">{(token.score * 100).toFixed(1)}%</span>
+      </div>
+      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className={`h-full bg-gradient-to-r ${getScoreColor(token.score)} transition-all duration-500`}
+          style={{ width: `${token.score * 100}%` }}
+        />
+      </div>
+    </div>
+
+    {/* Component Breakdown */}
+    <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="bg-white/5 rounded p-2">
+        <div className="text-gray-400 mb-1">Creator</div>
+        <div className="text-white font-medium">{(token.components.creatorOwnership * 100).toFixed(0)}%</div>
+      </div>
+      <div className="bg-white/5 rounded p-2">
+        <div className="text-gray-400 mb-1">Liquidity</div>
+        <div className="text-white font-medium">{(token.components.liquidityLock * 100).toFixed(0)}%</div>
+      </div>
+      <div className="bg-white/5 rounded p-2">
+        <div className="text-gray-400 mb-1">Honeypot</div>
+        <div className="text-white font-medium">{(token.components.honeypot * 100).toFixed(0)}%</div>
+      </div>
+    </div>
+  </div>
+));
 
 function RiskDashboard({ analyzedTokens }) {
-  const getRiskLevelColor = (level) => {
-    switch (level) {
-      case 'Low':
-        return 'text-success-400 bg-success-500/20 border-success-500/50';
-      case 'Medium':
-        return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/50';
-      case 'High':
-        return 'text-orange-400 bg-orange-500/20 border-orange-500/50';
-      case 'Critical':
-        return 'text-danger-400 bg-danger-500/20 border-danger-500/50';
-      default:
-        return 'text-gray-400 bg-gray-500/20 border-gray-500/50';
-    }
-  };
-
-  const getRiskIcon = (level) => {
-    switch (level) {
-      case 'Low':
-        return <CheckCircle className="w-5 h-5" />;
-      case 'Medium':
-        return <AlertTriangle className="w-5 h-5" />;
-      case 'High':
-        return <AlertTriangle className="w-5 h-5" />;
-      case 'Critical':
-        return <XCircle className="w-5 h-5" />;
-      default:
-        return <Shield className="w-5 h-5" />;
-    }
-  };
-
-  const getScoreColor = (score) => {
-    if (score < 0.3) return 'from-success-500 to-success-400';
-    if (score < 0.6) return 'from-yellow-500 to-yellow-400';
-    if (score < 0.8) return 'from-orange-500 to-orange-400';
-    return 'from-danger-500 to-danger-400';
-  };
-
-  const stats = {
-    total: analyzedTokens.length,
-    safe: analyzedTokens.filter(t => t.riskLevel === 'Low').length,
-    risky: analyzedTokens.filter(t => ['High', 'Critical'].includes(t.riskLevel)).length,
-  };
+  // Memoize stats calculation to avoid repeated filtering
+  const stats = useMemo(() => calculateStats(analyzedTokens), [analyzedTokens]);
 
   return (
     <div className="glass-card p-6">
@@ -78,56 +106,7 @@ function RiskDashboard({ analyzedTokens }) {
           </div>
         ) : (
           analyzedTokens.map((token, index) => (
-            <div
-              key={index}
-              className="bg-white/5 rounded-lg p-4 border border-white/10 hover:border-white/20 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="font-mono text-sm text-primary-400 mb-1">
-                    {token.tokenAddress}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <Clock className="w-3 h-3" />
-                    {new Date(token.timestamp).toLocaleTimeString()}
-                  </div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getRiskLevelColor(token.riskLevel)} flex items-center gap-1`}>
-                  {getRiskIcon(token.riskLevel)}
-                  {token.riskLevel}
-                </div>
-              </div>
-
-              {/* Risk Score Bar */}
-              <div className="mb-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-400">Risk Score</span>
-                  <span className="text-white font-medium">{(token.score * 100).toFixed(1)}%</span>
-                </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full bg-gradient-to-r ${getScoreColor(token.score)} transition-all duration-500`}
-                    style={{ width: `${token.score * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Component Breakdown */}
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="bg-white/5 rounded p-2">
-                  <div className="text-gray-400 mb-1">Creator</div>
-                  <div className="text-white font-medium">{(token.components.creatorOwnership * 100).toFixed(0)}%</div>
-                </div>
-                <div className="bg-white/5 rounded p-2">
-                  <div className="text-gray-400 mb-1">Liquidity</div>
-                  <div className="text-white font-medium">{(token.components.liquidityLock * 100).toFixed(0)}%</div>
-                </div>
-                <div className="bg-white/5 rounded p-2">
-                  <div className="text-gray-400 mb-1">Honeypot</div>
-                  <div className="text-white font-medium">{(token.components.honeypot * 100).toFixed(0)}%</div>
-                </div>
-              </div>
-            </div>
+            <TokenItem key={token.id || index} token={token} />
           ))
         )}
       </div>

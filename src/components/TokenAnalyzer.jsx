@@ -1,27 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Search, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://127.0.0.1:8080';
 
+// Pre-allocated form data template to reduce memory allocation
+const createFormData = () => ({
+  tokenAddress: '',
+  totalSupply: '',
+  creatorBalance: '',
+  lockedLiquidity: '',
+  totalLiquidity: '',
+  isPotentialHoneypot: false,
+});
+
 function TokenAnalyzer({ onAnalysisComplete }) {
-  const [formData, setFormData] = useState({
-    tokenAddress: '',
-    totalSupply: '',
-    creatorBalance: '',
-    lockedLiquidity: '',
-    totalLiquidity: '',
-    isPotentialHoneypot: false,
-  });
+  const [formData, setFormData] = useState(createFormData());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Use ref to track pending requests and prevent memory leaks
+  const pendingRequestRef = useRef(null);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
+    
+    // Cancel any pending request
+    if (pendingRequestRef.current) {
+      pendingRequestRef.current.cancel();
+    }
+    
     setLoading(true);
     setError('');
 
     try {
+      // Create cancel token for request cleanup
+      const source = axios.CancelToken.source();
+      pendingRequestRef.current = source;
+      
       const response = await axios.post(`${API_URL}/api/analyze`, {
         token_address: formData.tokenAddress,
         total_supply: formData.totalSupply,
@@ -29,6 +45,8 @@ function TokenAnalyzer({ onAnalysisComplete }) {
         locked_liquidity: formData.lockedLiquidity,
         total_liquidity: formData.totalLiquidity,
         is_potential_honeypot: formData.isPotentialHoneypot,
+      }, {
+        cancelToken: source.token
       });
 
       if (response.data.success) {
@@ -36,33 +54,31 @@ function TokenAnalyzer({ onAnalysisComplete }) {
           ...response.data.data,
           tokenAddress: formData.tokenAddress,
           timestamp: new Date().toISOString(),
+          id: `${formData.tokenAddress}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         };
         onAnalysisComplete(result);
-        setFormData({
-          tokenAddress: '',
-          totalSupply: '',
-          creatorBalance: '',
-          lockedLiquidity: '',
-          totalLiquidity: '',
-          isPotentialHoneypot: false,
-        });
+        // Reset form using pre-allocated template
+        setFormData(createFormData());
       } else {
         setError(response.data.error || 'Analysis failed');
       }
     } catch (err) {
-      setError('Failed to connect to API server. Make sure the Rust backend is running.');
+      if (!axios.isCancel(err)) {
+        setError('Failed to connect to API server. Make sure the Rust backend is running.');
+      }
     } finally {
+      pendingRequestRef.current = null;
       setLoading(false);
     }
-  };
+  }, [formData, onAnalysisComplete]);
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
-  };
+  }, []);
 
   return (
     <div className="glass-card p-6">

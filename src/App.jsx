@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Shield, Activity } from 'lucide-react';
 import TokenAnalyzer from './components/TokenAnalyzer';
 import RiskDashboard from './components/RiskDashboard';
 import WalletConnect from './components/WalletConnect';
 import { Web3Provider } from './context/Web3Provider';
+import { CircularBuffer } from './utils/memoryPool';
 import './index.css';
 
 function App() {
+  // Use useRef to maintain circular buffer across renders without causing re-renders
+  const tokenBufferRef = React.useRef(new CircularBuffer(50));
   const [analyzedTokens, setAnalyzedTokens] = useState([]);
 
-  const handleAnalysisComplete = (result) => {
-    setAnalyzedTokens(prev => [result, ...prev].slice(0, 10));
-  };
+  // Memoized callback to prevent unnecessary re-renders
+  const handleAnalysisComplete = useCallback((result) => {
+    // Add to circular buffer for efficient memory management
+    tokenBufferRef.current.push(result);
+    
+    // Only update state when buffer changes (throttled)
+    setAnalyzedTokens(tokenBufferRef.current.toArray());
+  }, []);
 
   return (
     <div className="min-h-screen text-white">
