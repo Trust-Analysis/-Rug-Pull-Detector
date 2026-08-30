@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Search, Loader2, AlertCircle, RefreshCw, Shield, Settings } from 'lucide-react';
+import { Search, Loader2, AlertCircle, RefreshCw, Shield, Settings, FileKey } from 'lucide-react';
 import { useChain } from '../context/ChainProvider';
 import { buildReportHref } from '../lib/report';
 import ZKPrivacyDisclosure from './ZKPrivacyDisclosure';
 import ProxyPatternDisclosure from './ProxyPatternDisclosure';
+import PermitSecurityDisclosure from './PermitSecurityDisclosure';
 
 function TokenAnalyzer({ onAnalysisComplete }) {
   const { activeAdapter, activeChainId } = useChain();
@@ -28,6 +29,8 @@ function TokenAnalyzer({ onAnalysisComplete }) {
   const [analyzingZK, setAnalyzingZK] = useState(false);
   const [proxyAnalysisResult, setProxyAnalysisResult] = useState(null);
   const [analyzingProxy, setAnalyzingProxy] = useState(false);
+  const [permitAnalysisResult, setPermitAnalysisResult] = useState(null);
+  const [analyzingPermit, setAnalyzingPermit] = useState(false);
 
   // Helper: Get the final inputs, combining auto-fetched data with overrides
   const getFinalInputs = useCallback(() => {
@@ -126,6 +129,7 @@ function TokenAnalyzer({ onAnalysisComplete }) {
         });
         setZkAnalysisResult(null);
         setProxyAnalysisResult(null);
+        setPermitAnalysisResult(null);
       } else {
         setError(payload.error || 'Analysis failed');
       }
@@ -210,6 +214,37 @@ function TokenAnalyzer({ onAnalysisComplete }) {
       setError('Failed to analyze proxy pattern: ' + err.message);
     } finally {
       setAnalyzingProxy(false);
+    }
+  };
+
+  const handlePermitAnalysis = async () => {
+    if (!tokenAddress) return;
+    setAnalyzingPermit(true);
+    setError('');
+    
+    try {
+      const response = await fetch('/api/permit-security-analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contractAddress: tokenAddress,
+          rpcUrl: null // Would use default RPC in production
+        }),
+      });
+      
+      const payload = await response.json();
+      
+      if (response.ok) {
+        setPermitAnalysisResult(payload);
+      } else {
+        setError(payload.error || 'Permit security analysis failed');
+      }
+    } catch (err) {
+      setError('Failed to analyze permit security: ' + err.message);
+    } finally {
+      setAnalyzingPermit(false);
     }
   };
 
@@ -481,6 +516,48 @@ function TokenAnalyzer({ onAnalysisComplete }) {
             contractAddress={tokenAddress}
             proxyAnalysisResult={proxyAnalysisResult}
             onRefresh={handleProxyAnalysis}
+          />
+        )}
+
+        {/* Permit Security Analysis */}
+        <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileKey className="w-5 h-5 text-primary-400" />
+              <span className="text-sm font-medium text-gray-300">
+                Permit Security Analysis
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handlePermitAnalysis}
+              disabled={!tokenAddress || analyzingPermit}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {analyzingPermit ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <FileKey className="w-4 h-4" />
+                  Analyze Permit
+                </>
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            Analyze EIP-712/EIP-2612 permit functions for domain separator attacks, nonce replay vulnerabilities, and signature validation issues.
+          </p>
+        </div>
+
+        {/* Permit Security Disclosure Component */}
+        {permitAnalysisResult && (
+          <PermitSecurityDisclosure
+            contractAddress={tokenAddress}
+            permitAnalysisResult={permitAnalysisResult}
+            onRefresh={handlePermitAnalysis}
           />
         )}
 
