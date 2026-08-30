@@ -24,3 +24,8 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chron
 dotenvy = "0.15"
 hex = "0.4"
 rand = "0.8"
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors"] }
