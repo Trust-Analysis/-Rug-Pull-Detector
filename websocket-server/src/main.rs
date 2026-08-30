@@ -9,6 +9,9 @@ use tracing_subscriber::prelude::*;
 mod broadcast;
 mod subscription;
 mod types;
+mod chain_actor;
+mod actor_monitor;
+mod block_ingestion;
 
 use broadcast::AlertBroadcaster;
 use subscription::SubscriptionManager;
@@ -16,6 +19,9 @@ use types::{Alert, ClientMessage, ServerMessage};
 use rug_pull_websocket_server::database::{create_pool, run_migrations};
 use rug_pull_websocket_server::risk_cache::RiskCache;
 use rug_pull_websocket_server::cpu_pool::CpuPool;
+use rug_pull_websocket_server::chain_actor::{ActorCoordinator, ChainActor, ChainId};
+use rug_pull_websocket_server::actor_monitor::ActorMonitor;
+use rug_pull_websocket_server::block_ingestion::BlockIngestionBridge;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -53,6 +59,29 @@ async fn main() -> Result<()> {
         .map(|n| n.get())
         .unwrap_or(4);
     let cpu_pool = Arc::new(CpuPool::new(threads));
+
+    // Initialize actor coordinator for multi-chain block processing
+    let actor_coordinator = Arc::new(ActorCoordinator::new());
+    
+    // Initialize actor monitor for performance tracking
+    let actor_monitor = Arc::new(ActorMonitor::new(1000)); // 1 second monitoring interval
+    actor_monitor.start_monitoring().await?;
+    info!("Actor monitor started");
+    
+    // Register chain actors for supported networks
+    let eth_actor = ChainActor::new(ChainId::Ethereum);
+    actor_coordinator.register_actor(ChainId::Ethereum, eth_actor).await;
+    
+    let bnb_actor = ChainActor::new(ChainId::BnbChain);
+    actor_coordinator.register_actor(ChainId::BnbChain, bnb_actor).await;
+    
+    let stellar_actor = ChainActor::new(ChainId::Stellar);
+    actor_coordinator.register_actor(ChainId::Stellar, stellar_actor).await;
+    
+    let solana_actor = ChainActor::new(ChainId::Solana);
+    actor_coordinator.register_actor(ChainId::Solana, solana_actor).await;
+    
+    info!("Actor coordinator initialized with 4 chain actors");
 
     let subscription_manager = Arc::new(SubscriptionManager::new());
     let alert_broadcaster = Arc::new(AlertBroadcaster::new(subscription_manager.clone(), risk_cache.clone()));
