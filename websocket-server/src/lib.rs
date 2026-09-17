@@ -5,3 +5,5 @@ pub mod evm_disassembler;
 pub mod chain_actor;
 pub mod actor_monitor;
 pub mod block_ingestion;
+pub mod metrics;
+pub mod metrics_server;

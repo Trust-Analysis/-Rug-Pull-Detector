@@ -5,6 +5,8 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use tracing_subscriber::prelude::*;
+use rug_pull_websocket_server::metrics::{self, rpc, cache, inference, websocket, actor, database, alerts};
+use rug_pull_websocket_server::metrics_server::MetricsServer;
 
 mod broadcast;
 mod subscription;
@@ -25,6 +27,19 @@ use rug_pull_websocket_server::block_ingestion::BlockIngestionBridge;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize Prometheus metrics exporter
+    let metrics_handle = metrics::init_metrics();
+    info!("Prometheus metrics exporter initialized");
+
+    // Start the protected metrics server
+    let metrics_server = MetricsServer::new();
+    let metrics_handle_clone = metrics_handle.clone();
+    tokio::spawn(async move {
+        if let Err(e) = metrics_server.run(metrics_handle_clone).await {
+            error!("Metrics server error: {}", e);
+        }
+    });
+
     // Initialize telemetry with tokio-console support
     let console_layer = console_subscriber::ConsoleLayer::builder()
         .with_default_env()
@@ -121,6 +136,7 @@ async fn main() -> Result<()> {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
+                            websocket::record_message_received("text");
                             let cpu_pool = cpu_pool.clone();
                             let parse_res = cpu_pool.spawn(move || {
                                 serde_json::from_str::<ClientMessage>(&text)
@@ -144,14 +160,20 @@ async fn main() -> Result<()> {
                             }
                         }
                         Ok(Message::Close(_)) => {
+                            websocket::record_message_received("close");
                             info!("Client {} sent close frame", client_id);
+                            websocket::record_disconnection("close_frame");
                             break;
                         }
                         Err(e) => {
+                            websocket::record_message_received("error");
                             error!("Error receiving message: {}", e);
+                            websocket::record_disconnection("error");
                             break;
                         }
-                        _ => {}
+                        _ => {
+                            websocket::record_message_received("other");
+                        }
                     }
                 }
             };
@@ -163,7 +185,9 @@ async fn main() -> Result<()> {
                     if subscription_manager.is_subscribed(client_id, &alert.address).await {
                         let server_msg = ServerMessage::Alert(alert.clone());
                         if let Ok(json) = serde_json::to_string(&server_msg) {
+                            websocket::record_message_sent("alert");
                             if write.send(Message::Text(json)).await.is_err() {
+                                websocket::record_disconnection("send_error");
                                 break;
                             }
                         }

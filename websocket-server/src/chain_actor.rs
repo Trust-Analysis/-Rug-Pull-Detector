@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock, Semaphore};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn, instrument};
+use crate::metrics::actor;
 
 /// Maximum number of messages in bounded channels before backpressure kicks in
 const CHANNEL_CAPACITY: usize = 1000;
@@ -256,14 +257,16 @@ impl ChainActor {
     #[instrument(skip(self, payload))]
     async fn process_block(&mut self, payload: BlockPayload) {
         let start_time = Instant::now();
-        
+        let chain = self.chain_id.as_str();
+
         // Acquire semaphore permit for backpressure handling
         let _permit = match self.semaphore.clone().acquire_owned().await {
             Ok(permit) => permit,
             Err(_) => {
-                error!("Failed to acquire semaphore for {}", self.chain_id.as_str());
+                error!("Failed to acquire semaphore for {}", chain);
                 let mut metrics = self.metrics.write().await;
                 metrics.record_backpressure();
+                actor::record_backpressure(chain);
                 return;
             }
         };
@@ -276,19 +279,27 @@ impl ChainActor {
 
         let processing_time = start_time.elapsed();
         let latency_ns = processing_time.as_nanos() as u64;
+        let latency_ms = processing_time.as_secs_f64() * 1000.0;
 
-        // Update metrics
+        // Update internal metrics
         {
             let mut metrics = self.metrics.write().await;
             match processing_result {
                 Ok(_) => metrics.record_latency(latency_ns),
                 Err(_) => {
                     metrics.record_timeout();
+                    actor::record_actor_timeout(chain);
                     warn!("Processing timeout for block {} on {}", 
-                          payload.block_number, self.chain_id.as_str());
+                          payload.block_number, chain);
                 }
             }
         }
+
+        // Update Prometheus metrics
+        actor::record_block_processing_duration(chain, latency_ms);
+        actor::record_blocks_processed(chain, 1);
+        actor::record_inter_actor_latency(chain, latency_ms);
+        actor::record_queue_depth(chain, self.receiver.len());
 
         // Update status
         {
